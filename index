@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Even-Money Roulette Progression Tracker</title>
+<style>
+  :root {
+    --bg:#0f1220; --card:#171a2b; --muted:#8ea0c8; --text:#e9efff; --accent:#6aaefc; --good:#38d996; --bad:#ff6b6b;
+    --grid:#24304a; --border:#2a3250;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color:var(--text); background:radial-gradient(1200px 600px at 80% -10%, #1a2241 0%, #0f1220 50%, #0f1220 100%);
+  }
+  header{padding:18px 16px 8px; display:flex; flex-wrap:wrap; gap:12px; align-items:end; border-bottom:1px solid var(--border)}
+  h1{font-size:18px; margin:0 12px 0 0; font-weight:700}
+  .pill{padding:8px 10px; background:var(--card); border:1px solid var(--border); border-radius:10px; display:flex; gap:8px; align-items:center}
+  .pill label{font-size:12px; color:var(--muted)}
+  .pill input{width:110px; padding:6px 8px; border-radius:8px; border:1px solid var(--grid); background:#0e1326; color:var(--text)}
+  .pill input[type="number"]{text-align:right}
+  .pill .suffix{color:var(--muted); font-size:12px}
+  .actions{margin-left:auto; display:flex; gap:8px; flex-wrap:wrap}
+  button{
+    border:1px solid var(--border); background:var(--card); color:var(--text);
+    padding:10px 12px; border-radius:10px; cursor:pointer; transition:transform .04s ease;
+  }
+  button:hover{transform:translateY(-1px)}
+  .win{border-color:#1f6a52}
+  .loss{border-color:#6a1f1f}
+  .reset{border-color:#3a4f7a}
+  .download{border-color:#385b2f}
+  main{padding:14px 16px 40px; display:grid; gap:14px}
+  .summary{
+    display:grid; gap:10px; grid-template-columns: repeat(4, minmax(180px,1fr));
+  }
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+    border:1px solid var(--border); border-radius:14px; padding:14px;
+  }
+  .card h3{margin:0 0 4px; font-size:12px; color:var(--muted); font-weight:600}
+  .metric{font-size:22px; font-weight:700}
+  .good{color:var(--good)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+  .flex{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .mono{font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  .tableWrap{overflow:auto; border:1px solid var(--border); border-radius:14px; background:var(--card)}
+  table{border-collapse:separate; border-spacing:0; width:100%}
+  thead th{position:sticky; top:0; background:#14192b; z-index:1; color:var(--muted); font-weight:600; font-size:12px}
+  th, td{padding:10px 12px; border-bottom:1px solid var(--border); text-align:right}
+  th:first-child, td:first-child{text-align:left}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block; padding:4px 8px; border:1px solid var(--grid); border-radius:999px; font-size:12px; color:var(--muted)}
+  canvas{width:100%; height:240px; display:block; background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0)); border:1px solid var(--border); border-radius:14px}
+  .foot{color:var(--muted); font-size:12px; margin-top:-6px}
+  .note{color:var(--muted); font-size:12px; margin-top:8px}
+  .nowrap{white-space:nowrap}
+  .active{background:var(--accent); color:#000}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Even‑Money Progression Tracker</h1>
+    <div class="pill">
+      <label for="unitValue">Stake per unit</label>
+      <input id="unitValue" type="number" min="0" step="0.01" value="1.00" />
+      <span class="suffix">currency</span>
+    </div>
+    <div class="pill">
+      <label for="targetUnits">Cycle target (+units)</label>
+      <input id="targetUnits" type="number" min="1" step="1" value="5" />
+    </div>
+    <div class="pill">
+      <label for="startUnits">Starting stake (units)</label>
+      <input id="startUnits" type="number" min="1" step="1" value="1" />
+    </div>
+    <div class="pill">
+      <label for="timerMinutes">Timer (minutes)</label>
+      <input id="timerMinutes" type="number" min="1" step="1" value="15" />
+    </div>
+    <div class="actions">
+      <button class="win" id="btnWin">Add Win (+)</button>
+      <button class="loss" id="btnLoss">Add Loss (−)</button>
+      <button id="btnUndo">Undo</button>
+      <button class="reset" id="btnReset">Reset</button>
+      <button class="download" id="btnTimer">15:00</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary">
+      <div class="card">
+        <h3>Current Stake (units)</h3>
+        <div class="metric mono" id="currentStake">1</div>
+        <div class="foot">Next bet size in units</div>
+      </div>
+      <div class="card">
+        <h3>Cycle P/L (units)</h3>
+        <div class="metric mono" id="cycleUnits">0</div>
+        <div class="foot">Resets at target</div>
+      </div>
+      <div class="card">
+        <h3>Total P/L (<span class="nowrap">units / money</span>)</h3>
+        <div class="metric mono" id="totalPL">0 / £0.00</div>
+        <div class="foot">Updates with stake per unit</div>
+      </div>
+      <div class="card">
+        <h3>Cycle</h3>
+        <div class="metric mono" id="cycleNo">1</div>
+        <div class="foot">Increments after hitting target</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Profit Chart (cumulative units)</h3>
+      <canvas id="chart" width="1200" height="240" aria-label="Cumulative profit chart"></canvas>
+      <div class="note">Tip: change “Stake per unit” anytime — money figures update instantly; chart shows units for clarity.</div>
+    </section>
+
+    <section class="tableWrap">
+      <table id="logTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Result</th>
+            <th>Stake (u)</th>
+            <th>Stake (money)</th>
+            <th>Outcome (u)</th>
+            <th>Outcome (money)</th>
+            <th>Cumulative (u)</th>
+            <th>Cumulative (money)</th>
+            <th>Next Stake (u)</th>
+            <th>Cycle</th>
+          </tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </section>
+
+    <div class="note">
+      Rules implemented: even‑money payout; Win → next stake +1u; Loss → next stake +2u; after each bet, if cycle profit ≥ target, next stake resets to 1u and a new cycle begins.
+    </div>
+  </main>
+
+<script>
+(function(){
+  const el = (id)=>document.getElementById(id);
+
+  const unitInput = el('unitValue');
+  const targetInput = el('targetUnits');
+  const startUnitsInput = el('startUnits');
+  const timerInput = el('timerMinutes');
+  const btnWin = el('btnWin');
+  const btnLoss = el('btnLoss');
+  const btnUndo = el('btnUndo');
+  const btnReset = el('btnReset');
+  const btnTimer = el('btnTimer');
+
+  const currentStakeEl = el('currentStake');
+  const cycleUnitsEl = el('cycleUnits');
+  const totalPLEl = el('totalPL');
+  const cycleNoEl = el('cycleNo');
+  const logBody = el('logBody');
+  const chart = el('chart');
+  const ctx = chart.getContext('2d');
+
+  // State
+  let state = {
+    currentStakeUnits: 1,
+    cumulativeUnits: 0,
+    cycleStartCumuUnits: 0,
+    cycleNo: 1,
+    rows: [], // each row {n, result, stakeUnits, stakeMoney, outcomeUnits, outcomeMoney, cumuUnits, cumuMoney, nextUnits, cycleAt}
+  };
+
+  // Timer state
+  let timerInterval = null;
+  let timerRemaining = Math.max(1, Math.floor(Number(timerInput.value || 15))) * 60;
+  let timerRunning = false;
+
+  // Helpers
+  const fmtMoney = (v)=>{
+    const val = Number(v)||0;
+    // Try to guess currency symbol from user locale; fallback to £
+    try {
+      return new Intl.NumberFormat(undefined,{style:'currency',currency:'GBP',currencyDisplay:'symbol'}).format(val);
+    } catch {
+      return '£' + val.toFixed(2);
+    }
+  };
+
+  const unitVal = ()=> Number(unitInput.value || 0);
+  const targetUnits = ()=> Math.max(1, Math.floor(Number(targetInput.value||5)));
+  const startUnits = ()=> Math.max(1, Math.floor(Number(startUnitsInput.value||1)));
+
+  const recomputeMoneyColumns = ()=>{
+    const u = unitVal();
+    state.rows.forEach(r=>{
+      r.stakeMoney = r.stakeUnits * u;
+      r.outcomeMoney = r.outcomeUnits * u;
+      r.cumuMoney = r.cumuUnits * u;
+    });
+  };
+
+  const redrawTable = ()=>{
+    logBody.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    state.rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      const cells = [
+        r.n,
+        r.result,
+        r.stakeUnits.toFixed(0),
+        fmtMoney(r.stakeMoney),
+        (r.outcomeUnits>0? '+' : '') + r.outcomeUnits.toFixed(0),
+        (r.outcomeMoney>0? '+' : '') + fmtMoney(r.outcomeMoney),
+        r.cumuUnits.toFixed(0),
+        fmtMoney(r.cumuMoney),
+        r.nextUnits.toFixed(0),
+        r.cycleAt,
+      ];
+      cells.forEach((c,i)=>{
+        const td = document.createElement('td');
+        td.textContent = c;
+        if(i===1){ // result tag
+          td.innerHTML = `<span class="tag" style="border-color:${r.result==='W'?'#1f6a52':'#6a1f1f'}">${r.result}</span>`;
+          td.style.textAlign='left';
+        }
+        tr.appendChild(td);
+      });
+      frag.appendChild(tr);
+    });
+    logBody.appendChild(frag);
+  };
+
+  const redrawSummary = ()=>{
+    currentStakeEl.textContent = state.currentStakeUnits.toFixed(0);
+    const cycleUnits = state.cumulativeUnits - state.cycleStartCumuUnits;
+    cycleUnitsEl.textContent = cycleUnits.toFixed(0);
+    const totalMoney = state.cumulativeUnits * unitVal();
+    totalPLEl.textContent = `${state.cumulativeUnits.toFixed(0)} / ${fmtMoney(totalMoney)}`;
+    cycleNoEl.textContent = state.cycleNo;
+  };
+
+  const redrawChart = ()=>{
+    const w = chart.width, h = chart.height;
+    ctx.clearRect(0,0,w,h);
+
+    // grid
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+    const rows = 4;
+    for(let i=1;i<=rows;i++){
+      const y = Math.round((i/(rows+1))*h);
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+
+    // data in units
+    const data = state.rows.map(r=>r.cumuUnits);
+    if(data.length===0){ return; }
+
+    // scale
+    const min = Math.min(0, ...data);
+    const max = Math.max(0, ...data);
+    const pad = Math.max(2, Math.ceil((max - min) * 0.1));
+    const yMin = min - pad, yMax = max + pad;
+    const xStep = w / Math.max(1, data.length-1);
+
+    // axis zero line
+    if(yMin < 0 && yMax > 0){
+      const zeroY = h - ((0 - yMin) / (yMax - yMin)) * h;
+      ctx.strokeStyle = '#3b4a79';
+      ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke();
+    }
+
+    // line
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6aaefc';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x = i * xStep;
+      const y = h - ((v - yMin) / (yMax - yMin)) * h;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // dots
+    ctx.fillStyle = '#ffffff';
+    data.forEach((v,i)=>{
+      const x = i * xStep;
+      const y = h - ((v - yMin) / (yMax - yMin)) * h;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI*2); ctx.fill();
+    });
+  };
+
+  const renderAll = ()=>{
+    recomputeMoneyColumns();
+    redrawTable();
+    redrawSummary();
+    redrawChart();
+  };
+
+  const applyBet = (isWin)=>{
+    const stakeU = state.currentStakeUnits;
+    const outcomeU = isWin ? stakeU : -stakeU;
+    state.cumulativeUnits += outcomeU;
+
+    // cycle calc after the result
+    const cycleProfitU = state.cumulativeUnits - state.cycleStartCumuUnits;
+
+    // Decide next stake (before potential reset)
+    const proposedNextStake = stakeU + (isWin ? 1 : 2);
+    // how many units remain to hit cycle target
+    const remaining = targetUnits() - cycleProfitU;
+
+    let nextStake;
+    let cycleAt = state.cycleNo;
+
+    if (remaining <= 0) {
+      // cycle already met → reset next stake as before
+      state.cycleNo += 1;
+      state.cycleStartCumuUnits = state.cumulativeUnits; // new baseline
+      nextStake = startUnits();
+      cycleAt = state.cycleNo - 1;
+    } else {
+      if (isWin) {
+        // cap the next stake so a *winning* next bet reaches (but does not exceed) the target
+        nextStake = Math.min(proposedNextStake, remaining);
+      } else {
+        // keep normal loss progression
+        nextStake = proposedNextStake;
+      }
+      // ensure sensible integer stake
+      nextStake = Math.max(1, Math.floor(nextStake));
+    }
+
+    const u = unitVal();
+    const row = {
+      n: state.rows.length + 1,
+      result: isWin ? 'W' : 'L',
+      stakeUnits: stakeU,
+      stakeMoney: stakeU * u,
+      outcomeUnits: outcomeU,
+      outcomeMoney: outcomeU * u,
+      cumuUnits: state.cumulativeUnits,
+      cumuMoney: state.cumulativeUnits * u,
+      nextUnits: nextStake,
+      cycleAt: cycleAt
+    };
+
+    state.rows.push(row);
+    state.currentStakeUnits = nextStake;
+
+    renderAll();
+  };
+
+  const undo = ()=>{
+    const last = state.rows.pop();
+    if(!last) return;
+    // Rebuild state from scratch to avoid edge cases
+    const snapshot = JSON.parse(JSON.stringify(state.rows));
+    resetState();
+    snapshot.forEach(r=>{
+      // Recompute by replaying
+      applyBet(r.result === 'W');
+    });
+    // applyBet pushed rows; but we just replayed to end. Done.
+  };
+
+  const resetState = ()=>{
+    state = {
+      currentStakeUnits: startUnits(),
+      cumulativeUnits: 0,
+      cycleStartCumuUnits: 0,
+      cycleNo: 1,
+      rows: []
+    };
+    renderAll();
+  };
+
+  // Timer functions
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateTimerDisplay() {
+    btnTimer.textContent = formatTime(timerRemaining);
+    btnTimer.title = timerRunning ? 'Click to pause' : 'Click to start';
+  }
+
+  // Start the countdown
+  function startTimer() {
+    if (timerInterval) return;
+    timerRunning = true;
+    btnTimer.classList.add('active');
+    timerInterval = setInterval(() => {
+      if (timerRemaining <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timerRunning = false;
+        btnTimer.classList.remove('active');
+        // Visual alert when time's up (brief red flash)
+        btnTimer.textContent = '00:00';
+        btnTimer.classList.add('bad');
+        setTimeout(() => btnTimer.classList.remove('bad'), 1500);
+        return;
+      }
+      timerRemaining -= 1;
+      updateTimerDisplay();
+    }, 1000);
+    updateTimerDisplay();
+  }
+
+  // Pause the countdown
+  function pauseTimer() {
+    if (!timerInterval) return;
+    clearInterval(timerInterval);
+    timerInterval = null;
+    timerRunning = false;
+    btnTimer.classList.remove('active');
+    updateTimerDisplay();
+  }
+
+  // Reset timer from the minutes input
+  function resetTimer() {
+    const mins = Math.max(1, Math.floor(Number(timerInput.value || 15)));
+    timerInput.value = mins;
+    timerRemaining = mins * 60;
+    updateTimerDisplay();
+  }
+
+  // Events
+  btnWin.addEventListener('click', ()=>applyBet(true));
+  btnLoss.addEventListener('click', ()=>applyBet(false));
+  btnUndo.addEventListener('click', undo);
+  btnReset.addEventListener('click', resetState);
+
+  unitInput.addEventListener('input', renderAll);
+  targetInput.addEventListener('change', ()=>{
+    // Reevaluate cycles by replaying with new target
+    const snapshot = state.rows.map(r=>r.result);
+    resetState();
+    snapshot.forEach(res=>applyBet(res==='W'));
+  });
+  startUnitsInput.addEventListener('change', ()=>{
+    const start = startUnits();
+    if(start < 1) { startUnitsInput.value = 1; }
+    // Restart session at new base size (does not rewrite history)
+    state.currentStakeUnits = start;
+    renderAll();
+  });
+
+  // Timer events
+  timerInput.addEventListener('change', () => {
+    resetTimer();
+  });
+
+  btnTimer.addEventListener('click', () => {
+    if (timerRunning) pauseTimer();
+    else startTimer();
+  });
+
+  // Init
+  resetState();
+  updateTimerDisplay();
+})();
+</script>
+</body>
+</html>
